@@ -194,16 +194,14 @@ module Top_FirFilter_tb;
         // 0: +1 (001), 1: +3 (011), 2: -1 (111), 3: -3 (101)
         // (Verilog에서 배열로 미리 만들어두지 않고 case문으로 처리하겠습니다)
         
-        // [수정됨] 200kHz 심볼 레이트 = 3× oversampling at 600kHz
-        // 즉, 3번의 600kHz 중 1번만 실제 심볼, 나머지 2번은 0
-        // 500개의 랜덤 심볼을 넣어봅시다! (실제론 1500번의 600kHz 샘플)
+        // 500개의 랜덤 데이터를 연속으로 넣어봅시다!
         for(i=0; i<500; i=i+1) begin
             
-            // ===== 1번째 600kHz: 실제 심볼 입력 =====
+            // 1. 타이밍 기다리기 (600kHz)
             wait(iEnSample600k); 
             @(negedge iClk12M);
 
-            // 랜덤 심볼 생성 ($urandom 사용)
+            // 2. 랜덤 심볼 생성 ($urandom 사용)
             // 0~3 사이의 난수를 뽑아서 그에 맞는 심볼을 입력
             case($urandom % 4)
                 0: iFirIn = 3'b001; // +1
@@ -212,20 +210,17 @@ module Top_FirFilter_tb;
                 3: iFirIn = 3'b101; // -3
             endcase
 
-            // 다음 600kHz 에지까지 대기
-            wait(!iEnSample600k);
+            // 3. 입력 유지 및 제거
+            @(negedge iClk12M); 
             
-            // ===== 2번째 600kHz: 0 입력 =====
-            wait(iEnSample600k);
-            @(negedge iClk12M);
-            iFirIn = 3'b000; // Oversampling 0
+            // (옵션) 펄스 형태로 주고 싶으면 여기서 0으로 끄고, 
+            // 꽉 찬 데이터를 주고 싶으면 끄지 않고 다음 데이터가 올 때까지 유지합니다.
+            // 보통 통신 테스트에선 0으로 끄지 않고 유지하기도 하지만,
+            // 앞선 Impulse 테스트와 조건을 맞추기 위해 여기선 한 클럭 뒤에 끄겠습니다.
             wait(!iEnSample600k);
+            iFirIn = 3'b000; // 0으로 복귀 (Impulse Train 형태)
             
-            // ===== 3번째 600kHz: 0 입력 =====
-            wait(iEnSample600k);
-            @(negedge iClk12M);
-            iFirIn = 3'b000; // Oversampling 0
-            wait(!iEnSample600k);
+            // *만약 파형이 너무 듬성듬성하다면 위 iFirIn = 0; 줄을 주석 처리해보세요.
         end
 
         $display("=== Random Test Finished ===");
