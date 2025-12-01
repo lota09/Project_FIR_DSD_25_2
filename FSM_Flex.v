@@ -74,16 +74,13 @@ module Fsm_Flex (
   /*************************************************************/
   // Part 1: Current state update
   //여기에서 sample 600k posedge에만 변하게 해야함
-  always @(posedge iEnSample600k)
-  begin
-
+  
+  // FSM_Flex.v Line 78 수정 (단 1줄)
+  always @(posedge iClk_12M)
     if (!iRsn)
-      rCurState <= p_Idle;
-    else
-      rCurState <= rNxtState[1:0];
-
-  end
-
+        rCurState <= p_Idle;
+    else if (iEnSample600k == 1'b1)
+        rCurState <= rNxtState;
 
 
   // Part 2: Next state decision
