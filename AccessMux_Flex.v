@@ -13,6 +13,9 @@ module AccessMux_Flex (
 
   // Update flag
   input            iUpdateFlag,
+  
+  // Current FSM state
+  input  [1:0]     iCurState,
 
 
   // SP-SRAM write input from Top
@@ -34,18 +37,25 @@ module AccessMux_Flex (
 
   );
 
+  // FSM state parameters (must match FSM_Flex.v)
+  localparam p_Idle   = 2'b00;
+  localparam p_Update = 2'b01;
+  localparam p_MemRd  = 2'b10;
+
 
   /*************************************************************/
   // Mux. function
+  // Use FSM state instead of iUpdateFlag to avoid timing issue
+  // SRAM access is controlled only when FSM is in Update state
   /*************************************************************/
   // Csn mux
-  assign oCsn_Mux  = (iUpdateFlag == 1'b1) ? iCsn : iCsn_Fsm;
+  assign oCsn_Mux  = (iCurState == p_Update) ? iCsn : iCsn_Fsm;
 
   // Wrn mux
-  assign oWrn_Mux  = (iUpdateFlag == 1'b1) ? iWrn : iWrn_Fsm;
+  assign oWrn_Mux  = (iCurState == p_Update) ? iWrn : iWrn_Fsm;
 
   // Addr mux
-  assign oAddr_Mux = (iUpdateFlag == 1'b1) ? iAddr[3:0] : iAddr_Fsm[3:0];
+  assign oAddr_Mux = (iCurState == p_Update) ? iAddr[3:0] : iAddr_Fsm[3:0];
 
 
 endmodule

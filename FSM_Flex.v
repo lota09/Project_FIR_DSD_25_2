@@ -44,7 +44,10 @@ module Fsm_Flex (
 
   // Accumulator control output to Accumulator.v
   output wire           oEnDelay, 
-  output reg [3:0]      oInSel
+  output reg [3:0]      oInSel,
+
+  // Current state output for AccessMux
+  output wire [1:0]     oCurState
 
   // FIR output valid (optional 사용 가능)
   // output wire           oEnOut
@@ -81,6 +84,9 @@ module Fsm_Flex (
         rCurState <= p_Idle;
     else if (iEnSample600k == 1'b1)
         rCurState <= rNxtState;
+
+  // Current state output
+  assign oCurState = rCurState;
 
 
   // Part 2: Next state decision

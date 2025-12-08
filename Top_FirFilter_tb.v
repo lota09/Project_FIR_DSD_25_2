@@ -2,233 +2,216 @@
 
 module Top_FirFilter_tb;
 
-    // === 1. 로봇의 손 (입력 신호: reg) ===
-    // 칩에 신호를 '넣어줘야' 하므로 값을 저장할 수 있는 reg를 씁니다.
-    reg iClk12M;
-    reg iRsn;
-    reg iEnSample600k;
-    reg iCoeffUpdateFlag; // (다이어그램 이름 반영)
+    //===========================
+    // 1. DUT 입·출력 신호
+    //===========================
+    reg         iClk12M;
+    reg         iRsn;
 
-    reg iCsnRam;
-    reg iWrnRam;
-    reg [5:0]  iAddrRam;
-    reg [15:0] iWrDtRam;
+    reg         iEnSample600k;      // 600 kHz 샘플 구동 펄스
+    reg         iCoeffUpdateFlag;   // 1: 계수 업데이트, 0: 필터 동작
 
-    reg [2:0]  iFirIn;
+    reg         iCsnRam;
+    reg         iWrnRam;
+    reg  [5:0]  iAddrRam;
+    reg  signed [15:0] iWrDtRam;
 
-    // === 2. 로봇의 눈 (출력 신호: wire) ===
-    // 칩에서 나오는 신호를 '지켜봐야' 하므로 전선인 wire를 씁니다.
+    reg  [2:0]  iFirIn;
     wire [15:0] oFirOut;
 
-    // === 3. 정답지 및 테스트 변수 ===
-    integer i; // 반복문용 변수
-    reg [15:0] answer_sheet [0:63]; // 내가 쓴 계수를 기억해둘 공책
-
-    // === 4. 칩(DUT) 가져와서 연결하기 ===
+    //===========================
+    // DUT
+    //===========================
     Top_FirFilter_Flex u_DUT (
-        .iClk12M(iClk12M), 
-        .iRsn(iRsn), 
-        .iEnSample600k(iEnSample600k), 
-        .iCoeffUpdateFlag(iCoeffUpdateFlag),
+        .iClk12M          (iClk12M),
+        .iRsn             (iRsn),
+        .iEnSample600k    (iEnSample600k),
+        .iCoeffUpdateFlag (iCoeffUpdateFlag),
 
-        .iCsnRam(iCsnRam), 
-        .iWrnRam(iWrnRam), 
-        .iAddrRam(iAddrRam), 
-        .iWrDtRam(iWrDtRam),
+        .iCsnRam          (iCsnRam),
+        .iWrnRam          (iWrnRam),
+        .iAddrRam         (iAddrRam),
+        .iWrDtRam         (iWrDtRam),
 
-        .iFirIn(iFirIn), 
-        .oFirOut(oFirOut)
+        .iFirIn           (iFirIn),
+        .oFirOut          (oFirOut)
     );
 
-    // === 5. 심장 박동(Clock) 만들기 ===
-    // 12MHz = 83.33ns 주기 -> 절반인 41.67ns마다 뒤집기
-    initial iClk12M = 0;
-    always #41.67 iClk12M = ~iClk12M;
+    //===========================
+    // 2. 12 MHz clock
+    //===========================
+    initial iClk12M = 1'b0;
+    always #41.67 iClk12M = ~iClk12M;   // 83.33ns period → 12 MHz
 
-    // === 6. 600kHz 타이밍 신호 만들기 ===
-    // 12MHz / 600kHz = 20. 즉, 20박자마다 한 번씩 신호를 줍니다.
-    reg [4:0] cnt;
+    //===========================
+    // 3. 600 kHz Enable (20 clk 마다 1펄스)
+    //===========================
+    reg [4:0] rSampleCnt;
+
     always @(posedge iClk12M) begin
-        if(!iRsn) begin 
-            cnt <= 0; iEnSample600k <= 0; 
+        if (!iRsn) begin
+            rSampleCnt    <= 5'd0;
+            iEnSample600k <= 1'b0;
         end
         else begin
-            if(cnt == 19) begin 
-                cnt <= 0; iEnSample600k <= 1; // 20번째 박자에서 '톡'하고 칩니다.
+            if (rSampleCnt == 5'd19) begin
+                rSampleCnt    <= 5'd0;
+                iEnSample600k <= 1'b1;   // one-shot pulse
             end
-            else begin 
-                cnt <= cnt + 1; iEnSample600k <= 0; 
+            else begin
+                rSampleCnt    <= rSampleCnt + 1'b1;
+                iEnSample600k <= 1'b0;
             end
         end
     end
 
-    // === 7. 테스트 시나리오 (여기가 진짜!) ===
+    //===========================
+    // 4. 계수 테이블 (33-tap Kaiser)
+    //===========================
+    localparam NUM_TAPS = 33;   // Kaiser window 33 taps
+    integer k;
+    reg signed [15:0] coeff [0:NUM_TAPS-1];
+
     initial begin
-        // (1) 초기화 (Reset)
-        iRsn = 0; 
-        iCoeffUpdateFlag = 0;
-        iAddrRam = 0; iCsnRam = 1; iWrnRam = 1; iWrDtRam = 0; 
-        iFirIn = 0;
-        
-        repeat(5) @(posedge iClk12M); // 5박자 대기
-        iRsn = 1; // 리셋 해제 (전원 ON!)
-        repeat(5) @(posedge iClk12M);
+        coeff[0]  =  16'sd3;
+        coeff[1]  =  16'sd0;
+        coeff[2]  = -16'sd6;
+        coeff[3]  =  16'sd7;
+        coeff[4]  =  16'sd0;
+        coeff[5]  = -16'sd11;
+        coeff[6]  =  16'sd13;
+        coeff[7]  =  16'sd0;
+        coeff[8]  = -16'sd19;
+        coeff[9]  =  16'sd24;
+        coeff[10] =  16'sd0;
+        coeff[11] = -16'sd37;
+        coeff[12] =  16'sd48;
+        coeff[13] =  16'sd0;
+        coeff[14] = -16'sd102;
+        coeff[15] =  16'sd206;
 
-       // ============================================================
-        // (2) 계수 쓰기 (Write Mode) - 진짜 필터 계수 입력!
-        // ============================================================
-        $display("=== [Step 1] Writing REAL Coefficients (Kaiser Window) ===");
-        iCoeffUpdateFlag = 1; 
+        coeff[16] =  16'sd500;   // 중심 tap
 
-        for(i=0; i<40; i=i+1) begin
-            // 1. 진짜 계수 값 설정 (문서의 소수점 값을 16비트 정수로 변환한 값)
-            // 필터의 중심(Center)에서 값이 제일 크고, 양옆으로 물결치는 형태입니다.
-            case(i)
-                0:  answer_sheet[i] = 16'd146;   // 0.00446...
-                1:  answer_sheet[i] = 16'd0;     // -0.0000...
-                2:  answer_sheet[i] = -16'd242;  // -0.00739... (음수는 2의 보수로 들어감)
-                3:  answer_sheet[i] = 16'd302;   // 0.00928...
-                4:  answer_sheet[i] = 16'd0;
-                5:  answer_sheet[i] = -16'd463;
-                6:  answer_sheet[i] = 16'd567;
-                7:  answer_sheet[i] = 16'd0;
-                8:  answer_sheet[i] = -16'd844;
-                9:  answer_sheet[i] = 16'd1034;
-                // --- 10번 인덱스부터 RAM2 ---
-                10: answer_sheet[i] = 16'd0;
-                11: answer_sheet[i] = -16'd1616;
-                12: answer_sheet[i] = 16'd2104;
-                13: answer_sheet[i] = 16'd0;
-                14: answer_sheet[i] = -16'd4438;
-                15: answer_sheet[i] = 16'd8993;  
-                16: answer_sheet[i] = 16'd21845; // Center Peak! (가장 큰 값)
-                17: answer_sheet[i] = 16'd8993;  // 대칭 시작
-                18: answer_sheet[i] = -16'd4438;
-                19: answer_sheet[i] = 16'd0;
-                // --- 20번 인덱스부터 RAM3 ---
-                20: answer_sheet[i] = 16'd2104;
-                21: answer_sheet[i] = -16'd1616;
-                22: answer_sheet[i] = 16'd0;
-                23: answer_sheet[i] = 16'd1034;
-                24: answer_sheet[i] = -16'd844;
-                25: answer_sheet[i] = 16'd0;
-                26: answer_sheet[i] = 16'd567;
-                27: answer_sheet[i] = -16'd463;
-                28: answer_sheet[i] = 16'd0;
-                29: answer_sheet[i] = 16'd302;
-                // --- 30번 인덱스부터 RAM4 ---
-                30: answer_sheet[i] = -16'd242;
-                31: answer_sheet[i] = 16'd0;
-                32: answer_sheet[i] = 16'd146;
-                default: answer_sheet[i] = 16'd0; // 나머지는 0으로 채움
-            endcase
+        coeff[17] =  16'sd206;
+        coeff[18] = -16'sd102;
+        coeff[19] =  16'sd0;
+        coeff[20] =  16'sd48;
+        coeff[21] = -16'sd37;
+        coeff[22] =  16'sd0;
+        coeff[23] =  16'sd24;
+        coeff[24] = -16'sd19;
+        coeff[25] =  16'sd0;
+        coeff[26] =  16'sd13;
+        coeff[27] = -16'sd11;
+        coeff[28] =  16'sd0;
+        coeff[29] =  16'sd7;
+        coeff[30] = -16'sd6;
+        coeff[31] =  16'sd0;
+        coeff[32] =  16'sd3;
+    end
 
-            @(negedge iClk12M);
-            
-            // [주소 매핑 보정] 아까 해결했던 그 로직 그대로!
-            if (i < 10)      iAddrRam = i;           
-            else if (i < 20) iAddrRam = i + 6;       
-            else if (i < 30) iAddrRam = i + 12;      
-            else             iAddrRam = i + 18;      
-
-            iWrDtRam = answer_sheet[i];
-            iCsnRam = 0; iWrnRam = 0;  
-            @(negedge iClk12M);
-            iCsnRam = 1; iWrnRam = 1;  
+    //===========================
+    // 5. Transcript용 모니터
+    //===========================
+    always @(iAddrRam or iWrDtRam or iCsnRam or iWrnRam) begin
+        if (!iCsnRam && !iWrnRam) begin
+            $display("SPSRAM : %0d, Address : %0d, Data : %0d",
+                     iAddrRam[5:4], iAddrRam[3:0], $signed(iWrDtRam));
         end
-        repeat(10) @(posedge iClk12M);
+    end
 
-//         // (3) 필터 동작 (Run Mode)
-//         $display("=== [Step 2] Running Filter (Input Impulse) ===");
-//         iCoeffUpdateFlag = 0; // "동작해" 모드 설정
+    initial begin
+        $monitor($realtime, " ns, oFirOut = %0d", $signed(oFirOut));
+    end
 
-//         // 600kHz 타이밍이 올 때까지 기다림 (박자 맞추기)
-//         wait(iEnSample600k); 
-//         @(negedge iClk12M);
-        
-//         // 입력 Impulse '1' (3'b001) 투입!
-//         iFirIn = 3'b001; 
-        
-//         // 다음 박자에 바로 입력 끔 (Impulse는 순간적인 충격이니까)
-//         @(negedge iClk12M); 
-//         wait(!iEnSample600k); // 타이밍 신호가 꺼질 때까지 대기
-//         iFirIn = 3'b000;
+    //===========================
+    // 6. 메인 시나리오
+    //===========================
+    initial begin
+        // (1) Reset
+        iRsn             = 1'b0;
+        iCoeffUpdateFlag = 1'b0;
 
-//         // (4) 결과 채점 (Check)
-//         // 입력이 1이니까, 출력은 계수값(1, 2, 3...)이 순서대로 나와야 정답!
-//         for(i=0; i<40; i=i+1) begin
-            
-//             // [핵심] 칩 내부의 "계산 시작 신호(oEnDelay)"를 훔쳐봅니다.
-//             // 이게 1이 됐다는 건 계산 준비가 됐다는 뜻!
-//             wait(u_DUT.inst_FSM_Top.oEnDelay == 1); 
-            
-//             // 계산이 끝나고 데이터가 나올 때까지 2박자 정도 여유를 줍니다.
-//             repeat(2) @(posedge iClk12M); 
+        iCsnRam   = 1'b1;
+        iWrnRam   = 1'b1;
+        iAddrRam  = 6'd0;
+        iWrDtRam  = 16'sd0;
+        iFirIn    = 3'b000;
 
-//             // 값 비교
-//             if(oFirOut == answer_sheet[i]) begin
-//                 $display("[PASS] Index %0d: Output = %d", i, oFirOut);
-//             end else begin
-//                 $display("[FAIL] Index %0d: Output = %d (Expected: %d)", i, oFirOut, answer_sheet[i]);
-//             end
+        repeat (5) @(posedge iClk12M);
+        iRsn = 1'b1;
+        repeat (5) @(posedge iClk12M);
 
-//             // 이번 출력이 끝날 때까지(신호가 꺼질 때까지) 기다림
-//             wait(u_DUT.inst_FSM_Top.oEnDelay == 0);
-//         end
+        //--------------------------------------
+        // (2) Coefficient Update Phase
+        //--------------------------------------
+        $display("--------------------------------------------------");
+        $display("********* SPSRAM Data Update Start !! ************");
+        $display("--------------------------------------------------");
 
-//         $display("=== Test Finished ===");
-//         $stop; // 시뮬레이션 종료
-//     end
+        iCoeffUpdateFlag = 1'b1;   // coefficient update phase 진입
 
-// endmodule
+        // FSM이 p_Update 상태로 진입할 수 있도록 몇 클럭 대기
+        repeat (25) @(posedge iClk12M);  // 600kHz 펄스 1회 발생 보장
 
-// ... (앞부분: 초기화 및 계수 쓰기는 기존과 동일하게 유지) ...
+        // 다이어그램처럼, SPSRAM Write 구간 전체에서
+        // wCsnRam1, wWmRam1를 연속으로 Low 로 유지
+        @(negedge iClk12M);      // 시작 위치를 한 클럭 경계에 맞춤
+        iCsnRam = 1'b0;
+        iWrnRam = 1'b0;
 
-        // ============================================================
-        // (3) 필터 동작 (Run Mode) - [수정됨] 랜덤 심볼 입력 테스트!
-        // ============================================================
-        $display("=== [Step 2] Running Filter with Random Symbols ===");
-        iCoeffUpdateFlag = 0; // 동작 모드
+        for (k = 0; k < NUM_TAPS; k = k + 1) begin
+            if (k == 0 ) $display("*** SPSRAM #0 Update ***");
+            if (k == 10) $display("*** SPSRAM #1 Update ***");
+            if (k == 20) $display("*** SPSRAM #2 Update ***");
+            if (k == 30) $display("*** SPSRAM #3 Update ***");
 
-        // 4가지 심볼 정의 (Source 44 참조)
-        // 0: +1 (001), 1: +3 (011), 2: -1 (111), 3: -3 (101)
-        // (Verilog에서 배열로 미리 만들어두지 않고 case문으로 처리하겠습니다)
-        
-        // [수정됨] 200kHz 심볼 레이트 = 3× oversampling at 600kHz
-        // 즉, 3번의 600kHz 중 1번만 실제 심볼, 나머지 2번은 0
-        // 500개의 랜덤 심볼을 넣어봅시다! (실제론 1500번의 600kHz 샘플)
-        for(i=0; i<500; i=i+1) begin
-            
-            // ===== 1번째 600kHz: 실제 심볼 입력 =====
-            wait(iEnSample600k); 
-            @(negedge iClk12M);
+            // bank / local address 매핑
+            if      (k < 10)  iAddrRam = 6'd0  + k;        // bank0: addr[3:0] = 0~9
+            else if (k < 20)  iAddrRam = 6'd16 + (k-10);   // bank1: addr[3:0] = 0~9
+            else if (k < 30)  iAddrRam = 6'd32 + (k-20);   // bank2: addr[3:0] = 0~9
+            else              iAddrRam = 6'd48 + (k-30);   // bank3: addr[3:0] = 0~9
 
-            // 랜덤 심볼 생성 ($urandom 사용)
-            // 0~3 사이의 난수를 뽑아서 그에 맞는 심볼을 입력
-            case($urandom % 4)
+            iWrDtRam = coeff[k];
+
+            // 주소/데이터를 네거티브 엣지에 바꾸고,
+            // 포지티브 엣지에서 SPSRAM이 write 하도록 구성
+            @(posedge iClk12M);
+        end
+
+        // 마지막 write 이후 한 클럭 더 지나고 High 로 복귀
+        @(negedge iClk12M);
+        iCsnRam = 1'b1;
+        iWrnRam = 1'b1;
+
+        $display("--------------------------------------------------");
+        $display("********* SPSRAM Data Update Finish !! ***********");
+        $display("--------------------------------------------------");
+
+        //--------------------------------------
+        //--------------------------------------
+        // (3) FIR operation phase
+        //--------------------------------------
+        iCoeffUpdateFlag = 1'b0;   // FirFilter operation phase 진입
+
+        $display("=== [Step 2] Running Filter with Random 4-PAM Symbols ===");
+        // 4-PAM 랜덤 심볼 200개, 3× oversampling
+        for (k = 0; k < 200; k = k + 1) begin
+            @(posedge iEnSample600k);
+            case ($urandom % 4)
                 0: iFirIn = 3'b001; // +1
                 1: iFirIn = 3'b011; // +3
                 2: iFirIn = 3'b111; // -1
                 3: iFirIn = 3'b101; // -3
             endcase
 
-            // 다음 600kHz 에지까지 대기
-            wait(!iEnSample600k);
-            
-            // ===== 2번째 600kHz: 0 입력 =====
-            wait(iEnSample600k);
-            @(negedge iClk12M);
-            iFirIn = 3'b000; // Oversampling 0
-            wait(!iEnSample600k);
-            
-            // ===== 3번째 600kHz: 0 입력 =====
-            wait(iEnSample600k);
-            @(negedge iClk12M);
-            iFirIn = 3'b000; // Oversampling 0
-            wait(!iEnSample600k);
+            @(posedge iEnSample600k); iFirIn = 3'b000;
+            @(posedge iEnSample600k); iFirIn = 3'b000;
         end
 
         $display("=== Random Test Finished ===");
+        #1000;
         $stop;
     end
+
 endmodule

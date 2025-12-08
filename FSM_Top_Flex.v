@@ -73,6 +73,7 @@ module FSM_Top_Flex (
   wire             wWrn_Fsm_4;
 
   wire [3:0]       wAddr_Fsm;
+  wire [1:0]       wCurState;  // Current FSM state
  
  
 // 일단 그라운드synthesis용
@@ -107,7 +108,8 @@ module FSM_Top_Flex (
     .oAddr_Fsm(wAddr_Fsm),
 
     .oEnDelay(oEnDelay),
-    .oInSel(oInSel)
+    .oInSel(oInSel),
+    .oCurState(wCurState)
    // .oEnOut(oEnOut)
 
   );
@@ -144,6 +146,7 @@ module FSM_Top_Flex (
  AccessMux_Flex inst_AccessMux_Flex_1 (
 
     .iUpdateFlag(iUpdateFlag),
+    .iCurState(wCurState),
 
     .iCsn(wCsn_1),
     .iWrn(wWrn_1),
@@ -163,6 +166,7 @@ module FSM_Top_Flex (
  AccessMux_Flex inst_AccessMux_Flex_2 (
 
     .iUpdateFlag(iUpdateFlag),
+    .iCurState(wCurState),
 
     .iCsn(wCsn_2),
     .iWrn(wWrn_2),
@@ -182,6 +186,7 @@ module FSM_Top_Flex (
 AccessMux_Flex inst_AccessMux_Flex_3 (
 
     .iUpdateFlag(iUpdateFlag),
+    .iCurState(wCurState),
 
     .iCsn(wCsn_3),
     .iWrn(wWrn_3),
@@ -201,6 +206,7 @@ AccessMux_Flex inst_AccessMux_Flex_3 (
 AccessMux_Flex inst_AccessMux_Flex_4 (
 
     .iUpdateFlag(iUpdateFlag),
+    .iCurState(wCurState),
 
     .iCsn(wCsn_4),
     .iWrn(wWrn_4),
