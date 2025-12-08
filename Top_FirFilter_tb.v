@@ -189,12 +189,125 @@ module Top_FirFilter_tb;
         $display("--------------------------------------------------");
 
         //--------------------------------------
-        //--------------------------------------
-        // (3) FIR operation phase
+        // (3) FIR operation phase - 임펄스 응답 테스트 (4단계)
         //--------------------------------------
         iCoeffUpdateFlag = 1'b0;   // FirFilter operation phase 진입
+        
+        $display("==========================================================");
+        $display("===== Impulse Response Test (4 impulses + SRAM Clear) ====");
+        $display("==========================================================");
 
-        $display("=== [Step 2] Running Filter with Random 4-PAM Symbols ===");
+        // 임펄스 1: +1
+        $display("\n=== [Step 1] Impulse +1 ===");
+        @(posedge iEnSample600k); iFirIn = 3'b001; // +1
+        repeat (40) begin
+            @(posedge iEnSample600k); iFirIn = 3'b000;
+        end
+        
+        // SRAM 초기화 (Clear SRAM)
+        $display("*** Clearing SRAM after Impulse 1 ***");
+        iCoeffUpdateFlag = 1'b1;
+        repeat (25) @(posedge iClk12M);
+        
+        @(negedge iClk12M);
+        iCsnRam = 1'b0; iWrnRam = 1'b0;
+        for (k = 0; k < NUM_TAPS; k = k + 1) begin
+            if      (k < 10)  iAddrRam = 6'd0  + k;
+            else if (k < 20)  iAddrRam = 6'd16 + (k-10);
+            else if (k < 30)  iAddrRam = 6'd32 + (k-20);
+            else              iAddrRam = 6'd48 + (k-30);
+            iWrDtRam = coeff[k];
+            @(posedge iClk12M);
+        end
+        @(negedge iClk12M); iCsnRam = 1'b1; iWrnRam = 1'b1;
+        iCoeffUpdateFlag = 1'b0;
+        repeat (5) @(posedge iClk12M);
+
+        // 임펄스 2: +3
+        $display("\n=== [Step 2] Impulse +3 ===");
+        @(posedge iEnSample600k); iFirIn = 3'b011; // +3
+        repeat (40) begin
+            @(posedge iEnSample600k); iFirIn = 3'b000;
+        end
+        
+        // SRAM 초기화
+        $display("*** Clearing SRAM after Impulse 2 ***");
+        iCoeffUpdateFlag = 1'b1;
+        repeat (25) @(posedge iClk12M);
+        
+        @(negedge iClk12M);
+        iCsnRam = 1'b0; iWrnRam = 1'b0;
+        for (k = 0; k < NUM_TAPS; k = k + 1) begin
+            if      (k < 10)  iAddrRam = 6'd0  + k;
+            else if (k < 20)  iAddrRam = 6'd16 + (k-10);
+            else if (k < 30)  iAddrRam = 6'd32 + (k-20);
+            else              iAddrRam = 6'd48 + (k-30);
+            iWrDtRam = coeff[k];
+            @(posedge iClk12M);
+        end
+        @(negedge iClk12M); iCsnRam = 1'b1; iWrnRam = 1'b1;
+        iCoeffUpdateFlag = 1'b0;
+        repeat (5) @(posedge iClk12M);
+
+        // 임펄스 3: -1
+        $display("\n=== [Step 3] Impulse -1 ===");
+        @(posedge iEnSample600k); iFirIn = 3'b111; // -1
+        repeat (40) begin
+            @(posedge iEnSample600k); iFirIn = 3'b000;
+        end
+        
+        // SRAM 초기화
+        $display("*** Clearing SRAM after Impulse 3 ***");
+        iCoeffUpdateFlag = 1'b1;
+        repeat (25) @(posedge iClk12M);
+        
+        @(negedge iClk12M);
+        iCsnRam = 1'b0; iWrnRam = 1'b0;
+        for (k = 0; k < NUM_TAPS; k = k + 1) begin
+            if      (k < 10)  iAddrRam = 6'd0  + k;
+            else if (k < 20)  iAddrRam = 6'd16 + (k-10);
+            else if (k < 30)  iAddrRam = 6'd32 + (k-20);
+            else              iAddrRam = 6'd48 + (k-30);
+            iWrDtRam = coeff[k];
+            @(posedge iClk12M);
+        end
+        @(negedge iClk12M); iCsnRam = 1'b1; iWrnRam = 1'b1;
+        iCoeffUpdateFlag = 1'b0;
+        repeat (5) @(posedge iClk12M);
+
+        // 임펄스 4: -3
+        $display("\n=== [Step 4] Impulse -3 ===");
+        @(posedge iEnSample600k); iFirIn = 3'b101; // -3
+        repeat (40) begin
+            @(posedge iEnSample600k); iFirIn = 3'b000;
+        end
+        
+        // SRAM 초기화
+        $display("*** Clearing SRAM after Impulse 4 ***");
+        iCoeffUpdateFlag = 1'b1;
+        repeat (25) @(posedge iClk12M);
+        
+        @(negedge iClk12M);
+        iCsnRam = 1'b0; iWrnRam = 1'b0;
+        for (k = 0; k < NUM_TAPS; k = k + 1) begin
+            if      (k < 10)  iAddrRam = 6'd0  + k;
+            else if (k < 20)  iAddrRam = 6'd16 + (k-10);
+            else if (k < 30)  iAddrRam = 6'd32 + (k-20);
+            else              iAddrRam = 6'd48 + (k-30);
+            iWrDtRam = coeff[k];
+            @(posedge iClk12M);
+        end
+        @(negedge iClk12M); iCsnRam = 1'b1; iWrnRam = 1'b1;
+        iCoeffUpdateFlag = 1'b0;
+        repeat (5) @(posedge iClk12M);
+
+        //--------------------------------------
+        // (4) 랜덤 심볼 테스트 (5번째 단계)
+        //--------------------------------------
+        $display("\n==========================================================");
+        $display("=== [Step 5] Running Filter with Random 4-PAM Symbols ====");
+        $display("==========================================================");
+        
         // 4-PAM 랜덤 심볼 200개, 3× oversampling
         for (k = 0; k < 200; k = k + 1) begin
             @(posedge iEnSample600k);
@@ -209,7 +322,7 @@ module Top_FirFilter_tb;
             @(posedge iEnSample600k); iFirIn = 3'b000;
         end
 
-        $display("=== Random Test Finished ===");
+        $display("\n=== All Tests Finished ===");
         #1000;
         $stop;
     end
